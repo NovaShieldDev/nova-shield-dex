@@ -1,0 +1,18 @@
+# Nova Shield DEX
+
+Native decentralized exchange built on [Nova Shield Chain](https://github.com/NovaShieldDev/nova-shield-chain).
+
+Built on Nova Shield Chain's runtime primitives:
+
+- **MEV Protection** — Commit-reveal mechanism. Transaction contents are hidden until the slot closes, making front-running impossible by design.
+- **Runtime-Enforced Liquidity Locks** — Liquidity withdrawal is blocked at the state machine level until the lock period expires. No override path exists.
+- **Launch Period Protection** — First 5 minutes after pool creation, each address is limited to 5% of the token supply. Snipe bots cannot drain a new pool at launch.
+- **Batch Auction Clearing** — All orders in a slot execute at a single uniform price. Arrival time and fee level do not affect execution quality.
+
+---
+
+Source is closed during this phase. Documentation and integration guides will be published alongside the public launch.
+
+**Chain:** [nova-shield-chain](https://github.com/NovaShieldDev/nova-shield-chain) — Chain ID 1984 — Live
+
+**Announcements:** Follow official Nova Shield channels for launch date and early access details.
