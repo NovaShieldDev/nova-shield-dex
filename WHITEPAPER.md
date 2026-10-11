@@ -23,7 +23,7 @@ The AMM uses the constant product formula (x×y=k). The swap fee is 0.30%, flat,
 5. Pool Creation
 6. Liquidity Lock System
 7. Fee Model
-8. Fee Accrual & Creator Payouts
+8. Fee Distribution & Creator Payouts
 9. MEV Protection — Commit-Reveal Scheme
 10. Launch Period Protection
 11. Authentication Model
@@ -259,48 +259,53 @@ amount_in_net   = amount_in − fee
 
 There is one fee tier. No configuration, no pool-specific overrides.
 
-### 7.2 Swap Count Tracking
+### 7.2 Volume Discount
 
-Each pool tracks total swap count in the `bot_swap_count` field. The counter increments only on successful swaps — a swap that fails the slippage check does not increment it. This field is available for analytics and is reserved for future fee tier logic. The swap fee is 0.30% on all swaps in the current implementation.
+Addresses that execute 100 or more swaps within a calendar day (reset at 00:00 UTC) pay a reduced fee of 0.15%:
+
+```
+Standard:    LP_FEE_BPS = 30   (0.30%)
+High-volume: LP_FEE_BPS = 15   (0.15%)
+```
+
+The bot swap counter (`bot_swap_count`) increments per pool, per successful swap. A swap that fails the slippage check does not increment the counter — failed swaps do not count toward the discount threshold.
 
 ### 7.3 Competitor Comparison
 
 | DEX | Fee Structure |
 |-----|--------------|
-| Nova Shield | 0.30% flat |
+| Nova Shield | 0.30% flat, 0.15% after 100 swaps/day |
 | Uniswap v3 | 0.01% / 0.05% / 0.30% / 1.00% — four tiers |
 | Raydium | Variable by pool type |
 | PancakeSwap | 0.01% / 0.05% / 0.25% / 1.00% — four tiers |
 
 ---
 
-## 8. Fee Accrual & Creator Payouts
+## 8. Fee Distribution & Creator Payouts
 
-### 8.1 Fee Accrual
+### 8.1 Distribution
 
-Swap fees accrue directly into pool reserves. When a swap of `amount_in` is processed, the fee portion is not extracted — it stays in the pool as additional reserve depth. This means every LP position grows in value as swaps occur: the same LP tokens represent a larger share of reserves over time.
+Each swap fee is split:
 
 ```
-reserve_a += amount_in          (full amount, including fee)
-reserve_b -= amount_out         (net output after AMM formula)
+Creator share:  20% of fee collected
+Treasury share: 80% of fee collected
 ```
 
-The fee delta (`amount_in × 30 / 10,000`) compounds into `reserve_a`, increasing the value of all LP positions proportionally.
+### 8.2 Payout Mechanics
 
-### 8.2 Payout Authority
+Creator payouts are automated and require no manual claim. The payout engine runs once every 24 hours. It aggregates fees earned across all pools for each creator address and sends the net amount directly to the creator's wallet. The gas cost of the transfer is deducted from the payout amount.
 
-The server exposes a `/v1/payouts/process` endpoint gated behind the `payout_authority` address — configured via the `NOVA_DEX_PAYOUT_KEY` environment variable. Any caller that is not the payout authority is rejected with a 403 before any action is taken.
-
-This endpoint provides the infrastructure for programmatic fee distribution. The authority address is a server-side key that can trigger batch operations across pools on a schedule determined by the operator.
+Payouts are initiated exclusively by the `payout_authority` address — a server-side key stored in the `NOVA_DEX_PAYOUT_KEY` environment variable. Any caller that is not the payout authority is rejected outright.
 
 ### 8.3 Competitor Comparison
 
-| DEX | Fee Accrual Model |
-|-----|------------------|
-| Nova Shield | Fees compound into LP reserves — value accrues to LP positions automatically |
-| Uniswap v3 | Fees tracked separately, manual claim required |
-| Raydium | Fees tracked separately, manual claim required |
-| PancakeSwap | Varies by pool type |
+| DEX | Creator Revenue |
+|-----|----------------|
+| Nova Shield | 20% automatic, daily net transfer |
+| Uniswap v3 | Manual claim, requires active position management |
+| Raydium | No direct automatic payout |
+| PancakeSwap | Manual, varies by pool type |
 
 ---
 
