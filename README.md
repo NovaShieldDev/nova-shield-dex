@@ -1,8 +1,10 @@
 # Nova Shield DEX
 
-Native decentralized exchange built on [Nova Shield Chain](https://github.com/NovaShieldDev/nova-shield-chain).
+**Nova Shield Chain** — The L1 this DEX is built on: [github.com/NovaShieldDev/nova-shield-chain](https://github.com/NovaShieldDev/nova-shield-chain)
 
-Built on Nova Shield Chain's runtime primitives:
+---
+
+Native decentralized exchange built on Nova Shield Chain's runtime primitives:
 
 - **MEV Protection** — Commit-reveal mechanism. Transaction contents are hidden until the slot closes, making front-running impossible by design.
 - **Runtime-Enforced Liquidity Locks** — Liquidity withdrawal is blocked at the state machine level until the lock period expires. No override path exists.
