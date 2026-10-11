@@ -11,6 +11,10 @@ Built on Nova Shield Chain's runtime primitives:
 
 ---
 
+Full technical documentation: [WHITEPAPER.md](./WHITEPAPER.md)
+
+---
+
 Source is closed during this phase. Documentation and integration guides will be published alongside the public launch.
 
 **Chain:** [nova-shield-chain](https://github.com/NovaShieldDev/nova-shield-chain) — Chain ID 1984 — Live
