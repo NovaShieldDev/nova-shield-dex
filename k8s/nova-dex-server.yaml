@@ -1,0 +1,137 @@
+---
+# ── Nova DEX API Sunucusu Deployment ─────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nova-dex-server
+  namespace: nova-dex
+  labels:
+    app: nova-dex-server
+spec:
+  replicas: 3          # Başlangıç: 3 pod; HPA 3–50 arasında ölçekler
+  selector:
+    matchLabels:
+      app: nova-dex-server
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 2
+  template:
+    metadata:
+      labels:
+        app: nova-dex-server
+    spec:
+      # Pod'ları farklı node'lara yay
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: nova-dex-server
+      containers:
+        - name: nova-dex-server
+          image: nova-dex-server:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          env:
+            - name: PORT
+              value: "3000"
+            - name: DATABASE_URL
+              value: "postgres://nova:$(POSTGRES_PASSWORD)@postgres:5432/nova_dex"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nova-dex-secret
+                  key: postgres-password
+            - name: REDIS_URL
+              value: "redis://redis:6379"
+            - name: NOVA_PRICE_CENTS
+              value: "250"
+            - name: ALLOWED_ORIGIN
+              value: "https://dex.novashieldchain.com"
+            - name: PAYOUT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: nova-dex-secret
+                  key: payout-secret
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+
+---
+# ── Nova DEX API Service ──────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: nova-dex-server
+  namespace: nova-dex
+spec:
+  selector:
+    app: nova-dex-server
+  ports:
+    - port: 3000
+      targetPort: 3000
+
+---
+# ── Horizontal Pod Autoscaler ─────────────────────────────────────────────────
+# CPU %70'i aştığında yeni pod ekler; min 3, max 50.
+# 10M kullanıcı: her pod ~300 req/s → 50 pod → 15.000 req/s kapasitesi.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nova-dex-server-hpa
+  namespace: nova-dex
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nova-dex-server
+  minReplicas: 3
+  maxReplicas: 50
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30   # Ani trafik artışına hızlı tepki
+      policies:
+        - type: Pods
+          value: 5
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300  # Gereksiz scale-down'ı önle
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60

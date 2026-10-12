@@ -1,0 +1,26 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# Ortam değişkenleri (GİZLİ)
+.env
+.env.local
+.env.production
+
+# Kubernetes secret dosyaları (GİZLİ)
+k8s/secret.yaml
+
+# TLS sertifikaları
+*.pem
+*.key
+*.crt
+
+# Node.js
+node_modules/
+apps/web/.next/
+apps/web/out/
+
+# Veri dizinleri
+nova-dex-data/
+*.db

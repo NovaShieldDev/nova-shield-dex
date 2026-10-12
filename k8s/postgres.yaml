@@ -1,0 +1,92 @@
+---
+# ── PostgreSQL StatefulSet ────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: nova-dex
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: nova_dex
+            - name: POSTGRES_USER
+              value: nova
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nova-dex-secret
+                  key: postgres-password
+          args:
+            - "postgres"
+            - "-c"
+            - "max_connections=500"
+            - "-c"
+            - "shared_buffers=512MB"
+            - "-c"
+            - "work_mem=8MB"
+            - "-c"
+            - "effective_cache_size=2GB"
+            - "-c"
+            - "synchronous_commit=off"
+            - "-c"
+            - "checkpoint_completion_target=0.9"
+            - "-c"
+            - "wal_compression=on"
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "nova", "-d", "nova_dex"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "nova", "-d", "nova_dex"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 50Gi
+
+---
+# ── PostgreSQL Service ────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: nova-dex
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+  clusterIP: None   # Headless — StatefulSet için

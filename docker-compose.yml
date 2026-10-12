@@ -1,0 +1,145 @@
+version: "3.9"
+
+# Çalıştırma (tek instance):
+#   docker compose up
+#
+# Çalıştırma (3 API instance — yük dengeleme):
+#   docker compose up --scale nova-dex-server=3
+#
+# Production önerileri:
+#   - POSTGRES_PASSWORD, PAYOUT_SECRET güçlü değerlerle .env dosyasından set edin
+#   - TLS için Nginx önüne Certbot / external TLS termination ekleyin
+#   - Daha fazla ölçek için k8s/ dizinine bakın
+
+services:
+  # ── PostgreSQL Veritabanı ─────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: nova-dex-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       nova_dex
+      POSTGRES_USER:     nova
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-nova_secret}"
+    volumes:
+      - nova-pg-data:/var/lib/postgresql/data
+    # Bağlantı havuzu optimizasyonu (10M kullanıcı desteği için)
+    command: >
+      postgres
+        -c max_connections=500
+        -c shared_buffers=256MB
+        -c work_mem=4MB
+        -c effective_cache_size=1GB
+        -c wal_level=replica
+        -c synchronous_commit=off
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nova -d nova_dex"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # ── Redis (MEV mempool + bot sayaçları) ───────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: nova-dex-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+        --maxmemory 512mb
+        --maxmemory-policy allkeys-lru
+        --appendonly no
+        --hz 20
+        --tcp-keepalive 60
+    volumes:
+      - nova-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  # ── Nova DEX API Sunucusu (çoklu instance destekli) ───────────────────────────
+  # --scale nova-dex-server=N ile N kopya çalıştırılabilir.
+  # container_name YOK: scale için gerekli.
+  # ports YOK: Nginx üzerinden erişilir.
+  nova-dex-server:
+    build:
+      context: .
+      dockerfile: crates/nova-dex-server/Dockerfile
+    image: nova-dex-server:latest
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      PORT:             "3000"
+      DATABASE_URL:     "postgres://nova:${POSTGRES_PASSWORD:-nova_secret}@postgres:5432/nova_dex"
+      REDIS_URL:        "redis://redis:6379"
+      NOVA_L1_RPC_URL:  "${NOVA_L1_RPC_URL:-}"
+      NOVA_PRICE_CENTS: "${NOVA_PRICE_CENTS:-250}"
+      ALLOWED_ORIGIN:   "${ALLOWED_ORIGIN:-http://localhost:3001}"
+      PAYOUT_SECRET:    "${PAYOUT_SECRET:-}"
+      TLS_CERT_PATH:    "${TLS_CERT_PATH:-}"
+      TLS_KEY_PATH:     "${TLS_KEY_PATH:-}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  # ── Nginx Yük Dengeleyici ─────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nova-dex-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      nova-dex-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # ── Nova DEX Web Arayüzü ──────────────────────────────────────────────────────
+  nova-dex-web:
+    build:
+      context: apps/web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_DEX_API: "${NEXT_PUBLIC_DEX_API:-http://localhost:80}"
+    image: nova-dex-web:latest
+    container_name: nova-dex-web
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      PORT:                "3001"
+      NEXT_PUBLIC_DEX_API: "${NEXT_PUBLIC_DEX_API:-http://nginx:80}"
+    depends_on:
+      nginx:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  nova-pg-data:
+    driver: local
+  nova-redis-data:
+    driver: local

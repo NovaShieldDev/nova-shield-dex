@@ -1,0 +1,38 @@
+[workspace]
+resolver = "2"
+members = ["crates/nova-dex", "crates/nova-dex-server"]
+
+[workspace.package]
+version      = "0.1.0"
+edition      = "2021"
+rust-version = "1.85.0"
+authors      = ["Nova Shield Chain Contributors"]
+license      = "Apache-2.0"
+
+[workspace.dependencies]
+thiserror         = "1"
+sha2              = { version = "0.10", default-features = false }
+k256              = { version = "0.13", features = ["ecdsa"] }
+hex               = "0.4"
+serde             = { version = "1.0", features = ["derive"] }
+serde_json        = "1.0"
+primitive-types   = { version = "0.12", default-features = false }
+axum              = "0.7"
+axum-server       = { version = "0.7", features = ["tls-rustls"] }
+tokio             = { version = "1", features = ["full"] }
+tower-http        = { version = "0.5", features = ["cors"] }
+tracing           = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+reqwest            = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+sqlx               = { version = "0.8", features = ["postgres", "runtime-tokio-rustls"] }
+redis              = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1
+panic         = "abort"
+
+[profile.dev]
+opt-level = 0
+debug     = true

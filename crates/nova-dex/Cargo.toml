@@ -1,0 +1,22 @@
+[package]
+name        = "nova-dex"
+description = "Nova DEX — Nova Shield Chain üzerinde native merkeziyetsiz borsa"
+version.workspace     = true
+edition.workspace     = true
+rust-version.workspace = true
+authors.workspace     = true
+license.workspace     = true
+
+[dependencies]
+thiserror       = { workspace = true }
+sha2            = { workspace = true }
+hex             = { workspace = true }
+serde           = { workspace = true, optional = true }
+primitive-types = { workspace = true }
+
+[features]
+default = []
+serde   = ["dep:serde"]
+
+[dev-dependencies]
+serde_json = { workspace = true }

@@ -1,0 +1,40 @@
+---
+# ── Nginx Ingress ─────────────────────────────────────────────────────────────
+# Gereksinim: kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
+#
+# TLS sertifikası için cert-manager + Let's Encrypt önerilir.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nova-dex-ingress
+  namespace: nova-dex
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "256k"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "5"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
+    # Upstream keepalive
+    nginx.ingress.kubernetes.io/upstream-keepalive-connections: "64"
+    nginx.ingress.kubernetes.io/upstream-keepalive-timeout: "60"
+    # TLS (cert-manager)
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.novashieldchain.com
+      secretName: nova-dex-tls
+  rules:
+    - host: api.novashieldchain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nova-dex-server
+                port:
+                  number: 3000
